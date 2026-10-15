@@ -29,13 +29,6 @@ services:
       Smtp__FromName: ${SMTP_FROM_NAME:-Wolsels}
     volumes:
       - wolsels-data:/data
-    healthcheck:
-      # Het aspnet-image heeft geen curl/wget; bash kan zelf een HTTP-request doen.
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   frontend:
     image: ${REGISTRY:-wolsels}/wolsels-frontend:${TAG:-latest}
@@ -46,7 +39,7 @@ services:
       API_UPSTREAM: http://backend:8080
     ports:
       # Standaard alleen bereikbaar vanaf de server zelf; de nginx op de host proxyt hiernaartoe.
-      - "${WOLSELS_BIND:-127.0.0.1}:${WOLSELS_PORT:-8080}:80"
+      - "${WOLSELS_BIND:-127.0.0.1}:${WOLSELS_PORT:-8080}:8080"
     depends_on:
       backend:
         condition: service_healthy
