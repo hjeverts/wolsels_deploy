@@ -4,11 +4,29 @@ services:
   backend:
     image: ${REGISTRY:-wolsels}/wolsels-backend:${TAG:-latest}
     build:
-      context: ${BACKEND_CONTEXT:-../wolsels-backend}
+      context: ${BACKEND_CONTEXT:-../wolsels_backend}
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Blends__MaxComponents: ${MAX_BLEND_COMPONENTS:-6}
+      App__PublicUrl: ${WOLSELS_PUBLIC_URL:-}
+      DataProtection__KeysPath: /data/keys
+      # Accounts en beveiliging
+      Auth__AllowRegistration: ${ALLOW_REGISTRATION:-true}
+      Auth__MaxFailedAccessAttempts: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
+      Auth__LockoutMinutes: ${LOGIN_LOCKOUT_MINUTES:-15}
+      Auth__RateLimitPerMinute: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
+      Auth__RateLimitPerHour: ${AUTH_RATE_LIMIT_PER_HOUR:-60}
+      Auth__PasswordResetPerIpPerHour: ${PASSWORD_RESET_PER_IP_PER_HOUR:-5}
+      Auth__PasswordResetPerEmailPerHour: ${PASSWORD_RESET_PER_EMAIL_PER_HOUR:-3}
+      # Mailserver voor "wachtwoord vergeten" (leeg = uitgeschakeld)
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__Security: ${SMTP_SECURITY:-Auto}
+      Smtp__Username: ${SMTP_USERNAME:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__From: ${SMTP_FROM:-}
+      Smtp__FromName: ${SMTP_FROM_NAME:-Wolsels}
     volumes:
       - wolsels-data:/data
     healthcheck:
@@ -22,7 +40,7 @@ services:
   frontend:
     image: ${REGISTRY:-wolsels}/wolsels-frontend:${TAG:-latest}
     build:
-      context: ${FRONTEND_CONTEXT:-../wolsels-frontend}
+      context: ${FRONTEND_CONTEXT:-../wolsels_frontend}
     restart: unless-stopped
     environment:
       API_UPSTREAM: http://backend:8080
