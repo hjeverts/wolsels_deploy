@@ -30,10 +30,10 @@ Wolsels draait dan op <http://127.0.0.1:8080>, alleen bereikbaar vanaf de server
 ## Achter de nginx op de server
 
 Zet de nginx die al op je server draait ervoor als reverse proxy, met
-[`nginx/wolsels.conf.example`](nginx/wolsels.conf.example) als basis:
+[`nginx/wolsels.conf`](nginx/wolsels.conf) als basis:
 
 ```sh
-sudo cp nginx/wolsels.conf.example /etc/nginx/sites-available/wolsels
+sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels
 sudo nano /etc/nginx/sites-available/wolsels           # server_name (en evt. poort) aanpassen
 sudo ln -s /etc/nginx/sites-available/wolsels /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
