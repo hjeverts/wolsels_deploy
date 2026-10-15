@@ -34,9 +34,21 @@ sudo certbot --nginx -d wolsels.streve.nl    # HTTPS
 Zet na certbot de `Strict-Transport-Security`-regel in de site aan. Gebruik altijd HTTPS: de
 sessiecookie wordt dan als `Secure` verstuurd.
 
-Maak daarna direct je eigen account aan: het **eerste account** neemt eventuele gegevens van
-vóór de invoering van accounts over. Zet daarna in `.env` `ALLOW_REGISTRATION=false` als
-anderen zich niet zelf mogen aanmelden (en `docker compose up -d`).
+Maak daarna direct je eigen account aan: het **eerste account** wordt beheerder en neemt eventuele
+gegevens van vóór de invoering van accounts over. Zet daarna in `.env` `ALLOW_REGISTRATION=false`
+als anderen zich niet zelf mogen aanmelden (en `docker compose up -d`); via een uitnodigingslink
+voor een huishouden kan iemand dan nog steeds een account aanmaken.
+
+## Huishoudens en beheer
+
+- **Huishouden:** gegevens horen bij een huishouden. Nodig je partner uit via *Huishouden → Uitnodigingslink
+  maken* en stuur de link zelf door; jullie zien en bewerken dan dezelfde gegevens, ieder met een eigen
+  login en 2FA. Iemand kan lid zijn van meerdere huishoudens en wisselt bovenin.
+- **Beheerder:** het eerste account (bij bestaande installaties: de maker van het eerste huishouden).
+  Onder *Gebruikersbeheer*: accounts blokkeren, 2FA resetten, een herstellink voor een nieuw wachtwoord
+  maken, beheerders aanwijzen en accounts verwijderen. Beheerders zien geen gegevens van huishoudens.
+- **Buitengesloten?** Zet `ADMIN_EMAIL=jouw@adres.nl` in `.env` en `docker compose up -d`: dat account
+  wordt bij het opstarten beheerder.
 
 Welke poort is vrij? `ss -tln | grep -q ':8083 ' && echo bezet || echo vrij`
 
@@ -88,7 +100,8 @@ browser ──► nginx op de server (TLS, nginx/wolsels.conf)
 | `WOLSELS_PUBLIC_URL`                | –                       | Openbare URL (voor links in e-mails)                 |
 | `WOLSELS_PORT`                      | `8080`                  | Poort op 127.0.0.1 (= `proxy_pass` in de nginx-site) |
 | `MAX_BLEND_COMPONENTS`              | `6`                     | Maximaal aantal soorten wol per mengsel              |
-| `ALLOW_REGISTRATION`                | `true`                  | Zelf registreren toestaan (eerste account mag altijd)|
+| `ALLOW_REGISTRATION`                | `true`                  | Zelf registreren toestaan (eerste account en uitnodigingen mogen altijd) |
+| `ADMIN_EMAIL`                       | –                       | Dit account wordt altijd beheerder (herstel)         |
 | `LOGIN_MAX_FAILED_ATTEMPTS`         | `5`                     | Foute pogingen voordat een account geblokkeerd wordt |
 | `LOGIN_LOCKOUT_MINUTES`             | `15`                    | Duur van die blokkering                              |
 | `AUTH_RATE_LIMIT_PER_MINUTE`        | `10`                    | Max. inlog-/registratie-/2FA-pogingen per IP/minuut  |

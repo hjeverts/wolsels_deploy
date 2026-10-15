@@ -13,6 +13,7 @@ services:
       DataProtection__KeysPath: /data/keys
       # Accounts en beveiliging
       Auth__AllowRegistration: ${ALLOW_REGISTRATION:-true}
+      Auth__AdminEmail: ${ADMIN_EMAIL:-}
       Auth__MaxFailedAccessAttempts: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
       Auth__LockoutMinutes: ${LOGIN_LOCKOUT_MINUTES:-15}
       Auth__RateLimitPerMinute: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
