@@ -63,11 +63,13 @@ docker compose pull / up -d --build # bijwerken
 ./scripts/backup.sh                # backup van de database naar ./backups
 ```
 
+`backup.sh` stopt de backend een paar seconden zodat de database volledig is weggeschreven.
+
 Terugzetten van een backup:
 
 ```sh
 docker compose stop backend
-docker compose run --rm --no-deps -v "$PWD/backups:/backups" --entrypoint sh backend \
-  -c "cp /backups/<bestand>.db /data/wolsels.db && rm -f /data/wolsels.db-wal /data/wolsels.db-shm"
+docker compose run --rm --no-deps --user root -v "$PWD/backups:/backups" --entrypoint sh backend \
+  -c 'cp /backups/<bestand>.db /data/wolsels.db && rm -f /data/wolsels.db-wal /data/wolsels.db-shm && chown $APP_UID /data/wolsels.db'
 docker compose start backend
 ```
