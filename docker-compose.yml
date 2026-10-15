@@ -1,0 +1,36 @@
+name: wolsels
+
+services:
+  backend:
+    image: ${REGISTRY:-wolsels}/wolsels-backend:${TAG:-latest}
+    build:
+      context: ${BACKEND_CONTEXT:-../wolsels-backend}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Blends__MaxComponents: ${MAX_BLEND_COMPONENTS:-6}
+    volumes:
+      - wolsels-data:/data
+    healthcheck:
+      # Het aspnet-image heeft geen curl/wget; bash kan zelf een HTTP-request doen.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q Healthy <&3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: ${REGISTRY:-wolsels}/wolsels-frontend:${TAG:-latest}
+    build:
+      context: ${FRONTEND_CONTEXT:-../wolsels-frontend}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://backend:8080
+    ports:
+      - "${WOLSELS_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  wolsels-data:
