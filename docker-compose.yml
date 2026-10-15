@@ -27,7 +27,8 @@ services:
     environment:
       API_UPSTREAM: http://backend:8080
     ports:
-      - "${WOLSELS_PORT:-8080}:80"
+      # Standaard alleen bereikbaar vanaf de server zelf; de nginx op de host proxyt hiernaartoe.
+      - "${WOLSELS_BIND:-127.0.0.1}:${WOLSELS_PORT:-8080}:80"
     depends_on:
       backend:
         condition: service_healthy

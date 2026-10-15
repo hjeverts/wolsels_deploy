@@ -25,21 +25,40 @@ cp .env.example .env        # optioneel, om poort of instellingen aan te passen
 docker compose up -d --build
 ```
 
-Wolsels draait dan op <http://localhost:8080>.
+Wolsels draait dan op <http://127.0.0.1:8080>, alleen bereikbaar vanaf de server zelf.
+
+## Achter de nginx op de server
+
+Zet de nginx die al op je server draait ervoor als reverse proxy, met
+[`nginx/wolsels.conf.example`](nginx/wolsels.conf.example) als basis:
+
+```sh
+sudo cp nginx/wolsels.conf.example /etc/nginx/sites-available/wolsels
+sudo nano /etc/nginx/sites-available/wolsels           # server_name (en evt. poort) aanpassen
+sudo ln -s /etc/nginx/sites-available/wolsels /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d wol.example.nl                 # HTTPS
+```
+
+Wil je Wolsels zonder host-nginx direct bereikbaar maken, zet dan `WOLSELS_BIND=0.0.0.0` in `.env`.
 
 ## Architectuur
 
 ```
-browser ──► frontend (nginx :80) ──/api/──► backend (:8080) ──► SQLite (volume wolsels-data)
+browser ──► nginx op de server (TLS) ──► frontend-container (nginx, 127.0.0.1:8080)
+                                              ├── /       Angular-app
+                                              └── /api/ ──► backend (:8080) ──► SQLite (volume wolsels-data)
 ```
 
-Alleen de frontend is van buitenaf bereikbaar; nginx stuurt `/api/*` door naar de backend.
-De database wordt bij het opstarten automatisch aangemaakt en gemigreerd.
+De backend is niet van buitenaf bereikbaar; de frontend-container serveert de app en stuurt `/api/*`
+door naar de backend. Zo hoeft de nginx op de server maar één `proxy_pass` te hebben. De database
+wordt bij het opstarten automatisch aangemaakt en gemigreerd.
 
 ## Configuratie (`.env`)
 
 | Variabele              | Standaard              | Omschrijving                                    |
 |------------------------|------------------------|-------------------------------------------------|
+| `WOLSELS_BIND`         | `127.0.0.1`            | Luisteradres op de host (`0.0.0.0` = openbaar)  |
 | `WOLSELS_PORT`         | `8080`                 | Poort op de host                                |
 | `MAX_BLEND_COMPONENTS` | `6`                    | Maximaal aantal soorten wol per mengsel         |
 | `REGISTRY` / `TAG`     | `wolsels` / `latest`   | Naam en tag van de images                       |
