@@ -106,7 +106,13 @@ docker compose logs -f backend      # logs
 ./scripts/backup.sh                 # backup van de database naar ./backups
 ```
 
-`backup.sh` stopt de backend een paar seconden zodat de database volledig is weggeschreven.
+`backup.sh` stopt de backend een paar seconden zodat de database volledig is weggeschreven, en bewaart
+de nieuwste 10 backups (`BACKUP_KEEP=20 ./scripts/backup.sh` voor meer). `update.sh` maakt vóór elke
+update automatisch een backup. Kopieer `backups/` geregeld naar een andere plek.
+
+`update.sh` haalt alle drie de repo's bij en stopt als er niets nieuws is (`--force` om toch te
+herbouwen, bv. voor beveiligingsupdates van de base-images). Start de nieuwe backend niet goed, dan blijft
+de oude frontend staan en toont het script de logs.
 
 Terugzetten van een backup:
 
