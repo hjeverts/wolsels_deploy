@@ -22,14 +22,10 @@ git clone git@github.com:hjeverts/wolsels_deploy.git
 
 cd wolsels_deploy
 cp .env.example .env && chmod 600 .env
-nano .env                                    # o.a. WOLSELS_PUBLIC_URL en eventueel de mailserver
+nano .env                                    # o.a. WOLSELS_PORT, WOLSELS_PUBLIC_URL, mailserver
+docker compose up -d --build                 # Wolsels op 127.0.0.1:<WOLSELS_PORT>
 
-docker compose up -d --build                 # backend op 127.0.0.1:5080
-
-sudo mkdir -p /var/www/wolsels && sudo chown "$USER" /var/www/wolsels   # eenmalig
-./scripts/deploy-frontend.sh                 # frontend naar /var/www/wolsels/current
-
-sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels
+sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels   # poort in proxy_pass controleren
 sudo ln -s /etc/nginx/sites-available/wolsels /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d wolsels.streve.nl    # HTTPS
@@ -42,30 +38,55 @@ Maak daarna direct je eigen account aan: het **eerste account** neemt eventuele 
 vóór de invoering van accounts over. Zet daarna in `.env` `ALLOW_REGISTRATION=false` als
 anderen zich niet zelf mogen aanmelden (en `docker compose up -d`).
 
+Welke poort is vrij? `ss -tln | grep -q ':8083 ' && echo bezet || echo vrij`
+
+## Overstappen van de versie zonder frontend-container
+
+Heb je Wolsels eerder geïnstalleerd met `deploy-frontend.sh` en `/var/www/wolsels`? Je gegevens staan in
+het Docker-volume `wolsels_wolsels-data` en blijven bij de overstap gewoon staan.
+
+```sh
+cd wolsels_deploy
+./scripts/backup.sh                          # voor de zekerheid
+git pull --ff-only && git -C ../wolsels_frontend pull --ff-only && git -C ../wolsels_backend pull --ff-only
+docker compose up -d --build --remove-orphans
+```
+
+Je bestaande `WOLSELS_API_PORT` in `.env` wordt automatisch als poort gebruikt (hernoemen naar
+`WOLSELS_PORT` mag). Vervang daarna de nginx-site door de nieuwe, eenvoudigere versie; certbot past
+die opnieuw aan voor HTTPS:
+
+```sh
+sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels   # poort in proxy_pass controleren
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d wolsels.streve.nl
+```
+
+`/var/www/wolsels` is daarna niet meer nodig (`sudo rm -r /var/www/wolsels`).
+
 ## Architectuur
 
 ```
 browser ──► nginx op de server (TLS, nginx/wolsels.conf)
-              ├── /        statische Angular-app uit /var/www/wolsels/current
-              └── /api/ ─► backend-container (127.0.0.1:5080) ──► SQLite + sleutels (volume wolsels-data)
+              └── alles ──► frontend-container (nginx, 127.0.0.1:<WOLSELS_PORT>)
+                              ├── /       Angular-app
+                              └── /api/ ──► backend-container ──► SQLite + sleutels (volume wolsels-data)
 ```
 
-- **`nginx/wolsels.conf`** serveert de app (met fallback naar `index.html` voor Angular-routes), stuurt
-  `/api/` door naar de backend en zet de beveiligingsheaders (Content-Security-Policy e.d.). Hij geeft
-  het echte IP van de bezoeker door, waar de pogingslimieten van de backend op werken.
-- **`scripts/deploy-frontend.sh`** bouwt de frontend in Docker en zet hem in een nieuwe map onder
-  `releases/`; daarna wordt de symlink `current` in één keer omgezet. Er blijven 3 versies bewaard.
-  Terugdraaien: `ln -sfn /var/www/wolsels/releases/<vorige> /var/www/wolsels/current`.
-- De backend is alleen vanaf de server zelf bereikbaar. De database wordt bij het opstarten
+- De nginx op de server doet alleen TLS en één `proxy_pass`, en geeft het echte IP van de bezoeker door
+  (de pogingslimieten werken per IP).
+- De frontend-container serveert de app, stuurt `/api/` door naar de backend en zet de
+  beveiligingsheaders. Hij neemt het client-IP alleen over van proxies op interne netwerken.
+- De backend is alleen via de frontend-container bereikbaar. De database wordt bij het opstarten
   automatisch aangemaakt en gemigreerd.
+- Beide containers draaien als niet-root gebruiker en hebben een healthcheck.
 
 ## Configuratie (`.env`)
 
 | Variabele                           | Standaard               | Omschrijving                                         |
 |-------------------------------------|-------------------------|------------------------------------------------------|
 | `WOLSELS_PUBLIC_URL`                | –                       | Openbare URL (voor links in e-mails)                 |
-| `WOLSELS_API_PORT`                  | `5080`                  | Poort van de backend op 127.0.0.1 (= `proxy_pass`)   |
-| `WOLSELS_WEB_ROOT`                  | `/var/www/wolsels`      | Map voor de frontend (= `root` in de nginx-site)     |
+| `WOLSELS_PORT`                      | `8080`                  | Poort op 127.0.0.1 (= `proxy_pass` in de nginx-site) |
 | `MAX_BLEND_COMPONENTS`              | `6`                     | Maximaal aantal soorten wol per mengsel              |
 | `ALLOW_REGISTRATION`                | `true`                  | Zelf registreren toestaan (eerste account mag altijd)|
 | `LOGIN_MAX_FAILED_ATTEMPTS`         | `5`                     | Foute pogingen voordat een account geblokkeerd wordt |
@@ -80,10 +101,10 @@ browser ──► nginx op de server (TLS, nginx/wolsels.conf)
 | `SMTP_FROM` / `SMTP_FROM_NAME`      | – / `Wolsels`           | Afzender                                             |
 | `REGISTRY` / `TAG`                  | `wolsels` / `latest`    | Naam en tag van de images                            |
 | `BACKEND_CONTEXT`                   | `../wolsels_backend`    | Bouwcontext backend (pad of git-URL)                 |
-| `FRONTEND_CONTEXT`                  | `../wolsels_frontend`   | Bron van de frontend voor `deploy-frontend.sh`       |
+| `FRONTEND_CONTEXT`                  | `../wolsels_frontend`   | Bouwcontext frontend (pad of git-URL)                |
 
-Na het wijzigen van `.env`: `docker compose up -d`. Pas je `WOLSELS_API_PORT` of `WOLSELS_WEB_ROOT` aan,
-wijzig dan ook `proxy_pass` en `root` in de nginx-site.
+Na het wijzigen van `.env`: `docker compose up -d`. Pas je `WOLSELS_PORT` aan, wijzig dan ook
+`proxy_pass` in de nginx-site.
 
 ## Beveiliging
 
@@ -95,14 +116,14 @@ wijzig dan ook `proxy_pass` en `root` in de nginx-site.
   daarnaast een limiet per IP-adres per minuut en per uur, en voor herstelmails ook per e-mailadres.
 - **Sessie:** HttpOnly-cookie met SameSite=Strict, `Secure` via HTTPS. Sleutels staan in het volume,
   zodat een herstart niemand uitlogt.
-- **Headers:** Content-Security-Policy, X-Frame-Options, nosniff en Referrer-Policy via `nginx/wolsels.conf`.
-- **Container:** de backend draait als niet-root gebruiker en is alleen via 127.0.0.1 bereikbaar.
+- **Headers:** Content-Security-Policy, X-Frame-Options, nosniff en Referrer-Policy via de frontend-container.
+- **Containers:** draaien als niet-root gebruiker; alleen de frontend is bereikbaar, en dan alleen via 127.0.0.1.
 
 ## Beheer
 
 ```sh
 docker compose logs -f backend      # logs
-./scripts/update.sh                 # alles bijwerken: git pull, backend herbouwen, frontend uitrollen
+./scripts/update.sh                 # alles bijwerken: git pull, backup, containers herbouwen
 ./scripts/backup.sh                 # backup van de database naar ./backups
 ```
 
@@ -111,8 +132,9 @@ de nieuwste 10 backups (`BACKUP_KEEP=20 ./scripts/backup.sh` voor meer). `update
 update automatisch een backup. Kopieer `backups/` geregeld naar een andere plek.
 
 `update.sh` haalt alle drie de repo's bij en stopt als er niets nieuws is (`--force` om toch te
-herbouwen, bv. voor beveiligingsupdates van de base-images). Start de nieuwe backend niet goed, dan blijft
-de oude frontend staan en toont het script de logs.
+herbouwen, bv. voor beveiligingsupdates van de base-images). Daarna wacht het tot beide containers gezond
+zijn en toont anders de logs. De gegevens in het volume blijven bij updates altijd staan; gebruik nooit
+`docker compose down -v`, want `-v` verwijdert het volume met alle gegevens.
 
 Terugzetten van een backup:
 

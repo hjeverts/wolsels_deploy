@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Werkt Wolsels bij: haalt de nieuwste code op, maakt een backup, herbouwt de backend en zet de
-# frontend live.
+# Werkt Wolsels bij: haalt de nieuwste code op, maakt een backup en herbouwt en herstart de containers.
+# De gegevens staan in het volume wolsels_wolsels-data en blijven bewaard.
 #
 #   ./scripts/update.sh              bijwerken als er iets nieuws is
 #   ./scripts/update.sh --force      ook herbouwen als er niets nieuws is (bv. voor nieuwe base-images)
@@ -60,28 +60,32 @@ if [ "$backup" = true ] && docker volume inspect wolsels_wolsels-data >/dev/null
   ./scripts/backup.sh
 fi
 
-echo "Backend bouwen en starten ..."
+echo "Containers bouwen en starten ..."
 docker compose up -d --build --remove-orphans
 
-printf "Wachten tot de backend gezond is "
-container=$(docker compose ps -q backend)
-for _ in $(seq 1 60); do
-  status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
-  [ "$status" = healthy ] && break
-  if [ "$status" = unhealthy ] || [ "$status" = exited ]; then break; fi
-  printf '.'
-  sleep 2
-done
-echo " $status"
-if [ "$status" != healthy ]; then
-  echo "De backend start niet goed. Laatste logregels:" >&2
-  docker compose logs --tail 30 backend >&2
-  echo "De frontend is NIET bijgewerkt. Terugzetten van de backup: zie README (Beheer)." >&2
-  exit 1
-fi
+# Wacht tot een service gezond is; geeft de status terug in $status.
+wait_healthy() {
+  printf "Wachten tot %s gezond is " "$1"
+  container=$(docker compose ps -q "$1")
+  for _ in $(seq 1 60); do
+    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
+    [ "$status" = healthy ] && break
+    if [ "$status" = unhealthy ] || [ "$status" = exited ]; then break; fi
+    printf '.'
+    sleep 2
+  done
+  echo " $status"
+}
 
-echo "Frontend uitrollen ..."
-./scripts/deploy-frontend.sh
+for service in backend frontend; do
+  wait_healthy "$service"
+  if [ "$status" != healthy ]; then
+    echo "$service start niet goed. Laatste logregels:" >&2
+    docker compose logs --tail 30 "$service" >&2
+    echo "De gegevens zijn niet aangetast; een backup staat in backups/. Zie README (Beheer)." >&2
+    exit 1
+  fi
+done
 
 # Oude, niet meer gebruikte images opruimen.
 docker image prune -f >/dev/null

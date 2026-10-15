@@ -29,10 +29,22 @@ services:
       Smtp__FromName: ${SMTP_FROM_NAME:-Wolsels}
     volumes:
       - wolsels-data:/data
-    ports:
-      # Alleen bereikbaar vanaf de server zelf; de nginx op de server stuurt /api/ hiernaartoe.
-      - "127.0.0.1:${WOLSELS_API_PORT:-5080}:8080"
 
+
+  frontend:
+    image: ${REGISTRY:-wolsels}/wolsels-frontend:${TAG:-latest}
+    build:
+      context: ${FRONTEND_CONTEXT:-../wolsels_frontend}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://backend:8080
+    ports:
+      # Alleen bereikbaar vanaf de server zelf; de nginx op de server proxyt hiernaartoe.
+      # (WOLSELS_API_PORT is de oude naam uit de versie zonder frontend-container.)
+      - "127.0.0.1:${WOLSELS_PORT:-${WOLSELS_API_PORT:-8080}}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   wolsels-data:
