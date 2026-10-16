@@ -12,23 +12,21 @@ tweestapsverificatie.
 
 ## Installeren
 
-Nodig op de server: Docker (met Compose) en nginx. Node of .NET zijn niet nodig; alles wordt in
-Docker gebouwd.
+Nodig op de server: Docker (met Compose) en nginx. Node of .NET zijn niet nodig: de images worden
+door GitHub Actions gebouwd en van ghcr.io gehaald (zie [Images](#images)).
 
 ```sh
-git clone git@github.com:hjeverts/wolsels_backend.git
-git clone git@github.com:hjeverts/wolsels_frontend.git
-git clone git@github.com:hjeverts/wolsels_deploy.git
+git clone https://github.com/hjeverts/wolsels_deploy.git
 
 cd wolsels_deploy
 cp .env.example .env && chmod 600 .env
 nano .env                                    # o.a. WOLSELS_PORT, WOLSELS_PUBLIC_URL, mailserver
-docker compose up -d --build                 # Wolsels op 127.0.0.1:<WOLSELS_PORT>
+docker compose up -d                         # Wolsels op 127.0.0.1:<WOLSELS_PORT>
 
 sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels   # poort in proxy_pass controleren
 sudo ln -s /etc/nginx/sites-available/wolsels /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d wolsels.streve.nl    # HTTPS
+sudo certbot --nginx -d wolsels.example.nl    # HTTPS
 ```
 
 Zet na certbot de `Strict-Transport-Security`-regel in de site aan. Gebruik altijd HTTPS: de
@@ -52,6 +50,27 @@ voor een huishouden kan iemand dan nog steeds een account aanmaken.
 
 Welke poort is vrij? `ss -tln | grep -q ':8083 ' && echo bezet || echo vrij`
 
+## Overstappen naar images van ghcr.io
+
+Bouwde je de images tot nu toe op de server? Pas dan in `.env` de images-instellingen aan:
+
+```sh
+REGISTRY=ghcr.io/hjeverts       # was: wolsels
+TAG=latest
+# BACKEND_CONTEXT en FRONTEND_CONTEXT mogen weg
+```
+
+Doe dit vóór de eerste `./scripts/update.sh` met de nieuwe versie; met `REGISTRY=wolsels` zou het
+script proberen images van Docker Hub te halen. Draai daarna:
+
+```sh
+git pull --ff-only
+./scripts/update.sh --force
+```
+
+De mappen `../wolsels_backend` en `../wolsels_frontend` zijn daarna niet meer nodig. Je gegevens in
+het volume blijven gewoon staan.
+
 ## Overstappen van de versie zonder frontend-container
 
 Heb je Wolsels eerder geïnstalleerd met `deploy-frontend.sh` en `/var/www/wolsels`? Je gegevens staan in
@@ -60,9 +79,11 @@ het Docker-volume `wolsels_wolsels-data` en blijven bij de overstap gewoon staan
 ```sh
 cd wolsels_deploy
 ./scripts/backup.sh                          # voor de zekerheid
-git pull --ff-only && git -C ../wolsels_frontend pull --ff-only && git -C ../wolsels_backend pull --ff-only
-docker compose up -d --build --remove-orphans
+git pull --ff-only
+docker compose up -d --remove-orphans
 ```
+
+Werk eerst `.env` bij zoals beschreven onder [Overstappen naar images van ghcr.io](#overstappen-naar-images-van-ghcrio).
 
 Je bestaande `WOLSELS_API_PORT` in `.env` wordt automatisch als poort gebruikt (hernoemen naar
 `WOLSELS_PORT` mag). Vervang daarna de nginx-site door de nieuwe, eenvoudigere versie; certbot past
@@ -71,7 +92,7 @@ die opnieuw aan voor HTTPS:
 ```sh
 sudo cp nginx/wolsels.conf /etc/nginx/sites-available/wolsels   # poort in proxy_pass controleren
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d wolsels.streve.nl
+sudo certbot --nginx -d wolsels.example.nl
 ```
 
 `/var/www/wolsels` is daarna niet meer nodig (`sudo rm -r /var/www/wolsels`).
@@ -112,12 +133,43 @@ browser ──► nginx op de server (TLS, nginx/wolsels.conf)
 | `SMTP_PORT` / `SMTP_SECURITY`       | `587` / `Auto`          | `StartTls` (587), `SslOnConnect` (465) of `None`     |
 | `SMTP_USERNAME` / `SMTP_PASSWORD`   | –                       | Inloggegevens mailserver                             |
 | `SMTP_FROM` / `SMTP_FROM_NAME`      | – / `Wolsels`           | Afzender                                             |
-| `REGISTRY` / `TAG`                  | `wolsels` / `latest`    | Naam en tag van de images                            |
-| `BACKEND_CONTEXT`                   | `../wolsels_backend`    | Bouwcontext backend (pad of git-URL)                 |
-| `FRONTEND_CONTEXT`                  | `../wolsels_frontend`   | Bouwcontext frontend (pad of git-URL)                |
+| `REGISTRY` / `TAG`                  | `ghcr.io/hjeverts` / `latest` | Registry en tag van de images                  |
+| `COMPOSE_FILE`                      | –                       | Met `docker-compose.build.yml` erbij: zelf bouwen    |
+| `BACKEND_CONTEXT`                   | `../wolsels_backend`    | Bouwcontext backend bij zelf bouwen (pad of git-URL) |
+| `FRONTEND_CONTEXT`                  | `../wolsels_frontend`   | Bouwcontext frontend bij zelf bouwen                 |
 
 Na het wijzigen van `.env`: `docker compose up -d`. Pas je `WOLSELS_PORT` aan, wijzig dan ook
 `proxy_pass` in de nginx-site.
+
+## Images
+
+Bij elke push naar `main` van [wolsels_backend](https://github.com/hjeverts/wolsels_backend) en
+[wolsels_frontend](https://github.com/hjeverts/wolsels_frontend) draait GitHub Actions de tests en zet
+het de images op ghcr.io:
+
+| Image                                 | Tags                                                     |
+|---------------------------------------|----------------------------------------------------------|
+| `ghcr.io/hjeverts/wolsels-backend`    | `latest`, `sha-<commit>`, bij een git-tag `v1.2.3` ook `1.2.3` en `1.2` |
+| `ghcr.io/hjeverts/wolsels-frontend`   | idem                                                     |
+
+Elke maandag worden ze zonder cache opnieuw gebouwd, zodat beveiligingsupdates van de base-images
+meekomen; `./scripts/update.sh` haalt die vanzelf op.
+
+**Terug naar een eerdere versie:** zet in `.env` `TAG=sha-<commit>` (de tags staan bij de packages op
+GitHub) en draai `./scripts/update.sh --force`. Backend en frontend krijgen dezelfde tag, dus kies een
+commit die in beide repo's bestaat, of gebruik versietags (`v1.2.3`) in beide repo's. Terug naar de
+nieuwste versie: `TAG=latest`. Let op: een oudere backend kent nieuwere databasemigraties niet; zet zo
+nodig ook de backup van vóór de update terug.
+
+**Zelf bouwen** in plaats van ghcr.io gebruiken (bv. voor eigen aanpassingen): clone
+`wolsels_backend` en `wolsels_frontend` naast deze repo en zet in `.env`:
+
+```sh
+COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml
+REGISTRY=wolsels
+```
+
+`./scripts/update.sh` doet dan `git pull` in de broncode-repo's en bouwt de images op de server.
 
 ## Beveiliging
 
@@ -136,7 +188,7 @@ Na het wijzigen van `.env`: `docker compose up -d`. Pas je `WOLSELS_PORT` aan, w
 
 ```sh
 docker compose logs -f backend      # logs
-./scripts/update.sh                 # alles bijwerken: git pull, backup, containers herbouwen
+./scripts/update.sh                 # alles bijwerken: nieuwe images ophalen, backup, herstarten
 ./scripts/backup.sh                 # backup van de database naar ./backups
 ```
 
@@ -144,8 +196,9 @@ docker compose logs -f backend      # logs
 de nieuwste 10 backups (`BACKUP_KEEP=20 ./scripts/backup.sh` voor meer). `update.sh` maakt vóór elke
 update automatisch een backup. Kopieer `backups/` geregeld naar een andere plek.
 
-`update.sh` haalt alle drie de repo's bij en stopt als er niets nieuws is (`--force` om toch te
-herbouwen, bv. voor beveiligingsupdates van de base-images). Daarna wacht het tot beide containers gezond
+`update.sh` haalt deze repo bij en daarna de nieuwste images (bij zelf bouwen: de broncode-repo's), en
+toont welke commits er nieuw zijn. Is er niets nieuws, dan stopt het (`--force` om de containers toch
+opnieuw te starten, of bij zelf bouwen opnieuw te bouwen). Daarna wacht het tot beide containers gezond
 zijn en toont anders de logs. De gegevens in het volume blijven bij updates altijd staan; gebruik nooit
 `docker compose down -v`, want `-v` verwijdert het volume met alle gegevens.
 
@@ -160,3 +213,7 @@ docker compose start backend
 
 Een backup bevat de database (met alle accounts), niet de sleutels van de sessiecookies; na het
 terugzetten moet iedereen hooguit opnieuw inloggen.
+
+## Licentie
+
+[MIT](LICENSE) © 2026 Hans Everts

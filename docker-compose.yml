@@ -1,10 +1,10 @@
+# Gebruikt de kant-en-klare images van ghcr.io. Zelf bouwen vanuit de broncode: zie
+# docker-compose.build.yml.
 name: wolsels
 
 services:
   backend:
-    image: ${REGISTRY:-wolsels}/wolsels-backend:${TAG:-latest}
-    build:
-      context: ${BACKEND_CONTEXT:-../wolsels_backend}
+    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-backend:${TAG:-latest}
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -33,9 +33,7 @@ services:
 
 
   frontend:
-    image: ${REGISTRY:-wolsels}/wolsels-frontend:${TAG:-latest}
-    build:
-      context: ${FRONTEND_CONTEXT:-../wolsels_frontend}
+    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-frontend:${TAG:-latest}
     restart: unless-stopped
     environment:
       API_UPSTREAM: http://backend:8080

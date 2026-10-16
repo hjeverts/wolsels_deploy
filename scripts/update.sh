@@ -1,9 +1,12 @@
 #!/usr/bin/env sh
-# Werkt Wolsels bij: haalt de nieuwste code op, maakt een backup en herbouwt en herstart de containers.
+# Werkt Wolsels bij: haalt de nieuwste images (of code) op, maakt een backup en herstart de containers.
 # De gegevens staan in het volume wolsels_wolsels-data en blijven bewaard.
 #
+# Standaard worden de images van ghcr.io gehaald. Staat docker-compose.build.yml in COMPOSE_FILE
+# (zie .env.example), dan doet het git pull in de broncode-repo's en bouwt het de images zelf.
+#
 #   ./scripts/update.sh              bijwerken als er iets nieuws is
-#   ./scripts/update.sh --force      ook herbouwen als er niets nieuws is (bv. voor nieuwe base-images)
+#   ./scripts/update.sh --force      ook herstarten (of herbouwen) als er niets nieuws is
 #   ./scripts/update.sh --no-backup  zonder backup vooraf
 set -eu
 cd "$(dirname "$0")/.."
@@ -35,22 +38,58 @@ pull() {
   fi
 }
 
-echo "Nieuwe code ophalen ..."
+echo "Nieuwe versie ophalen ..."
 if [ "$self_updated" = false ]; then
   before=$(git rev-parse HEAD)
   pull .
   # Dit script kan zelf veranderd zijn: opnieuw starten met de nieuwe versie.
   if [ "$before" != "$(git rev-parse HEAD)" ]; then
-    set -- "$@" --self-updated
-    [ "$force" = true ] || set -- "$@" --force
-    exec "$0" "$@"
+    exec "$0" "$@" --self-updated
   fi
+else
+  changed=true
 fi
-pull ../wolsels_backend
-pull ../wolsels_frontend
+
+# Zelf bouwen als docker-compose.build.yml meedoet, anders images van de registry halen.
+if docker compose config | grep -q '^ *build:'; then
+  build=true
+else
+  build=false
+fi
+
+# Image-ID en commit (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
+image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || echo -; }
+image_rev() {
+  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true)
+  case "$rev" in ""|"<no value>") rev="?" ;; esac
+  echo "$rev" | cut -c1-7
+}
+
+if [ "$build" = true ]; then
+  pull ../wolsels_backend
+  pull ../wolsels_frontend
+else
+  images=$(docker compose config --images)
+  if echo "$images" | grep -q '^wolsels/'; then
+    echo "REGISTRY=wolsels in .env hoort bij zelf bouwen. Zet REGISTRY=ghcr.io/hjeverts, of zet" >&2
+    echo "docker-compose.build.yml in COMPOSE_FILE. Zie README (Overstappen naar images van ghcr.io)." >&2
+    exit 1
+  fi
+  ids_before=$(for img in $images; do image_id "$img"; done)
+  revs_before=$(for img in $images; do image_rev "$img"; done)
+  docker compose pull --quiet
+  for img in $images; do
+    old_rev=$(echo "$revs_before" | head -n 1); revs_before=$(echo "$revs_before" | tail -n +2)
+    old_id=$(echo "$ids_before" | head -n 1); ids_before=$(echo "$ids_before" | tail -n +2)
+    if [ "$old_id" != "$(image_id "$img")" ]; then
+      echo "  $img: $old_rev -> $(image_rev "$img")"
+      changed=true
+    fi
+  done
+fi
 
 if [ "$changed" = false ] && [ "$force" = false ]; then
-  echo "Alles is al bijgewerkt. Gebruik --force om toch opnieuw te bouwen."
+  echo "Alles is al bijgewerkt. Gebruik --force om toch opnieuw te starten."
   exit 0
 fi
 
@@ -60,8 +99,17 @@ if [ "$backup" = true ] && docker volume inspect wolsels_wolsels-data >/dev/null
   ./scripts/backup.sh
 fi
 
-echo "Containers bouwen en starten ..."
-docker compose up -d --build --remove-orphans
+if [ "$build" = true ]; then
+  echo "Containers bouwen en starten ..."
+  docker compose up -d --build --remove-orphans
+else
+  echo "Containers starten ..."
+  if [ "$force" = true ]; then
+    docker compose up -d --force-recreate --remove-orphans
+  else
+    docker compose up -d --remove-orphans
+  fi
+fi
 
 # Wacht tot een service gezond is; geeft de status terug in $status.
 wait_healthy() {

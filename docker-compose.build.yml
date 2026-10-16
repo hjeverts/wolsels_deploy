@@ -1,0 +1,12 @@
+# Bouwt de images zelf vanuit de broncode-repo's in plaats van ze van ghcr.io te halen.
+# Aanzetten met in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml
+#   REGISTRY=wolsels
+# ./scripts/update.sh doet dan git pull in de broncode-repo's en bouwt opnieuw.
+services:
+  backend:
+    build:
+      context: ${BACKEND_CONTEXT:-../wolsels_backend}
+  frontend:
+    build:
+      context: ${FRONTEND_CONTEXT:-../wolsels_frontend}
