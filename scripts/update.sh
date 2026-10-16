@@ -58,16 +58,16 @@ else
 fi
 
 # Image-ID en versie (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
-image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || echo -; }
+image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null </dev/null || echo -; }
 # Versie van een draaiende container, of "niet gestart".
 container_version() {
   if [ -z "$1" ]; then echo "niet gestart"; return; fi
-  rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null || true)
+  rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null </dev/null || true)
   case "$rev" in ""|"<no value>") rev="?" ;; esac
   echo "$rev"
 }
 image_rev() {
-  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null || true)
+  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null </dev/null || true)
   case "$rev" in ""|"<no value>") rev="?" ;; esac
   echo "$rev"
 }
@@ -85,16 +85,26 @@ else
   docker compose pull --quiet
   # Vergelijken met wat er draait (niet met wat er vóór de pull lokaal stond): zo wordt ook een
   # gewijzigde BACKEND_TAG/FRONTEND_TAG opgepakt waarvan de image al lokaal stond.
-  for service in $(docker compose config --services); do
-    image=$(docker compose config --images "$service")
-    container=$(docker compose ps -q "$service")
+  # Image per service uit de genormaliseerde config. Niet "config --images <service>": dat geeft
+  # ook de images van de services waarvan deze afhangt (depends_on).
+  services=$(docker compose config | awk '
+    /^services:/ { s = 1; next }
+    s && /^[^ ]/ { s = 0 }
+    s && /^  [^ ]/ { service = $1; sub(":$", "", service) }
+    s && /^    image:/ { print service, $2 }
+  ')
+  # Geen pipe naar while: dan zou changed=true in een subshell verloren gaan.
+  while read -r service image; do
+    container=$(docker compose ps -q "$service" </dev/null)
     running=-
-    [ -z "$container" ] || running=$(docker inspect -f '{{.Image}}' "$container")
+    [ -z "$container" ] || running=$(docker inspect -f '{{.Image}}' "$container" </dev/null)
     if [ "$running" != "$(image_id "$image")" ]; then
       echo "  $service: $(container_version "$container") -> $(image_rev "$image")"
       changed=true
     fi
-  done
+  done <<EOF
+$services
+EOF
 fi
 
 if [ "$changed" = false ] && [ "$force" = false ]; then
