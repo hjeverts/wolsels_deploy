@@ -50,6 +50,20 @@ voor een huishouden kan iemand dan nog steeds een account aanmaken.
 
 Welke poort is vrij? `ss -tln | grep -q ':8083 ' && echo bezet || echo vrij`
 
+## Foto's bij de voorraad (backend en frontend vanaf v1.1.0)
+
+Voor het uploaden van foto's moet de nginx op de server grotere verzoeken toestaan (4 MB in plaats van
+1 MB). Kopieer `nginx/wolsels.conf` hiervoor niet opnieuw: certbot heeft de site op de server aangepast
+voor HTTPS. Pas alleen die ene regel aan:
+
+```sh
+sudo sed -i 's/client_max_body_size 1m;/client_max_body_size 4m;/' /etc/nginx/sites-available/wolsels
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Zonder deze aanpassing krijg je bij grotere foto's de melding *Er ging iets mis (413)*. Foto's staan in de
+database en zitten dus gewoon in de backups.
+
 ## Overstappen naar images van ghcr.io
 
 Bouwde je de images tot nu toe op de server? Pas dan in `.env` de images-instellingen aan:
