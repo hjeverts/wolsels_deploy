@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Maakt een kopie van de SQLite-database naar ./backups/wolsels-<datum>.db
-# De backend wordt kort gestopt zodat de database volledig (incl. WAL) is weggeschreven.
+# Copies the SQLite database to ./backups/wolsels-<date>.db
+# The backend is stopped briefly so that the database (incl. WAL) is fully written.
 set -eu
 cd "$(dirname "$0")/.."
 mkdir -p backups
@@ -15,8 +15,8 @@ docker compose run --rm --no-deps --user root -v "$PWD/backups:/backups" --entry
 
 [ -n "$was_running" ] && docker compose start backend >/dev/null
 [ "${status:-0}" -eq 0 ] || exit "$status"
-echo "Backup gemaakt: backups/$target"
+echo "Backup created: backups/$target"
 
-# Alleen de nieuwste backups bewaren (BACKUP_KEEP, standaard 10).
+# Only keep the newest backups (BACKUP_KEEP, default 10).
 keep="${BACKUP_KEEP:-10}"
 find backups -maxdepth 1 -name 'wolsels-*.db' | sort -r | tail -n +$((keep + 1)) | while read -r old; do rm -f "$old"; done

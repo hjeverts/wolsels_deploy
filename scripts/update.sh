@@ -1,13 +1,13 @@
 #!/usr/bin/env sh
-# Werkt Wolsels bij: haalt de nieuwste images (of code) op, maakt een backup en herstart de containers.
-# De gegevens staan in het volume wolsels_wolsels-data en blijven bewaard.
+# Updates Wolsels: fetches the newest images (or code), makes a backup and restarts the containers.
+# The data lives in the volume wolsels_wolsels-data and is kept.
 #
-# Standaard worden de images van ghcr.io gehaald. Staat docker-compose.build.yml in COMPOSE_FILE
-# (zie .env.example), dan doet het git pull in de broncode-repo's en bouwt het de images zelf.
+# By default the images are pulled from ghcr.io. If docker-compose.build.yml is in COMPOSE_FILE
+# (see .env.example), it runs git pull in the source repos and builds the images itself.
 #
-#   ./scripts/update.sh              bijwerken als er iets nieuws is
-#   ./scripts/update.sh --force      ook herstarten (of herbouwen) als er niets nieuws is
-#   ./scripts/update.sh --no-backup  zonder backup vooraf
+#   ./scripts/update.sh              update if there is something new
+#   ./scripts/update.sh --force      also restart (or rebuild) if there is nothing new
+#   ./scripts/update.sh --no-backup  without a backup first
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -19,13 +19,13 @@ for arg in "$@"; do
     --force) force=true ;;
     --no-backup) backup=false ;;
     --self-updated) self_updated=true ;;
-    *) echo "Onbekende optie: $arg" >&2; exit 2 ;;
+    *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
 
 changed=false
 
-# Haalt een repo bij en toont de nieuwe commits. Zet changed=true als er iets nieuws is.
+# Updates a repo and shows the new commits. Sets changed=true if there is something new.
 pull() {
   dir="$1"
   before=$(git -C "$dir" rev-parse HEAD)
@@ -38,11 +38,11 @@ pull() {
   fi
 }
 
-echo "Nieuwe versie ophalen ..."
+echo "Fetching new version ..."
 if [ "$self_updated" = false ]; then
   before=$(git rev-parse HEAD)
   pull .
-  # Dit script kan zelf veranderd zijn: opnieuw starten met de nieuwe versie.
+  # This script itself may have changed: restart with the new version.
   if [ "$before" != "$(git rev-parse HEAD)" ]; then
     exec "$0" "$@" --self-updated
   fi
@@ -50,18 +50,18 @@ else
   changed=true
 fi
 
-# Zelf bouwen als docker-compose.build.yml meedoet, anders images van de registry halen.
+# Build ourselves if docker-compose.build.yml is included, otherwise pull images from the registry.
 if docker compose config | grep -q '^ *build:'; then
   build=true
 else
   build=false
 fi
 
-# Image-ID en versie (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
+# Image ID and version (label from GitHub Actions) of an image, or "-" if it isn't there (yet).
 image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null </dev/null || echo -; }
-# Versie van een draaiende container, of "niet gestart".
+# Version of a running container, or "not started".
 container_version() {
-  if [ -z "$1" ]; then echo "niet gestart"; return; fi
+  if [ -z "$1" ]; then echo "not started"; return; fi
   rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null </dev/null || true)
   case "$rev" in ""|"<no value>") rev="?" ;; esac
   echo "$rev"
@@ -78,22 +78,22 @@ if [ "$build" = true ]; then
 else
   images=$(docker compose config --images)
   if echo "$images" | grep -q '^wolsels/'; then
-    echo "REGISTRY=wolsels in .env hoort bij zelf bouwen. Zet REGISTRY=ghcr.io/hjeverts, of zet" >&2
-    echo "docker-compose.build.yml in COMPOSE_FILE. Zie README (Overstappen naar images van ghcr.io)." >&2
+    echo "REGISTRY=wolsels in .env belongs to building yourself. Set REGISTRY=ghcr.io/hjeverts, or put" >&2
+    echo "docker-compose.build.yml in COMPOSE_FILE. See README (Switching to images from ghcr.io)." >&2
     exit 1
   fi
   docker compose pull --quiet
-  # Vergelijken met wat er draait (niet met wat er vóór de pull lokaal stond): zo wordt ook een
-  # gewijzigde BACKEND_TAG/FRONTEND_TAG opgepakt waarvan de image al lokaal stond.
-  # Image per service uit de genormaliseerde config. Niet "config --images <service>": dat geeft
-  # ook de images van de services waarvan deze afhangt (depends_on).
+  # Compare with what is running (not with what was local before the pull): that way a changed
+  # BACKEND_TAG/FRONTEND_TAG whose image was already local is picked up too.
+  # Image per service from the normalised config. Not "config --images <service>": that also returns
+  # the images of the services this one depends on (depends_on).
   services=$(docker compose config | awk '
     /^services:/ { s = 1; next }
     s && /^[^ ]/ { s = 0 }
     s && /^  [^ ]/ { service = $1; sub(":$", "", service) }
     s && /^    image:/ { print service, $2 }
   ')
-  # Geen pipe naar while: dan zou changed=true in een subshell verloren gaan.
+  # No pipe into while: changed=true would then be lost in a subshell.
   while read -r service image; do
     container=$(docker compose ps -q "$service" </dev/null)
     running=-
@@ -108,21 +108,21 @@ EOF
 fi
 
 if [ "$changed" = false ] && [ "$force" = false ]; then
-  echo "Alles is al bijgewerkt. Gebruik --force om toch opnieuw te starten."
+  echo "Everything is up to date. Use --force to restart anyway."
   exit 0
 fi
 
-# Backup vóór de update: de backend voert bij het starten automatisch databasemigraties uit.
+# Backup before the update: the backend runs database migrations automatically at startup.
 if [ "$backup" = true ] && docker volume inspect wolsels_wolsels-data >/dev/null 2>&1; then
-  echo "Backup maken ..."
+  echo "Creating backup ..."
   ./scripts/backup.sh
 fi
 
 if [ "$build" = true ]; then
-  echo "Containers bouwen en starten ..."
+  echo "Building and starting containers ..."
   docker compose up -d --build --remove-orphans
 else
-  echo "Containers starten ..."
+  echo "Starting containers ..."
   if [ "$force" = true ]; then
     docker compose up -d --force-recreate --remove-orphans
   else
@@ -130,9 +130,9 @@ else
   fi
 fi
 
-# Wacht tot een service gezond is; geeft de status terug in $status.
+# Waits until a service is healthy; returns the status in $status.
 wait_healthy() {
-  printf "Wachten tot %s gezond is " "$1"
+  printf "Waiting until %s is healthy " "$1"
   container=$(docker compose ps -q "$1")
   for _ in $(seq 1 60); do
     status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
@@ -147,14 +147,14 @@ wait_healthy() {
 for service in backend frontend; do
   wait_healthy "$service"
   if [ "$status" != healthy ]; then
-    echo "$service start niet goed. Laatste logregels:" >&2
+    echo "$service does not start properly. Last log lines:" >&2
     docker compose logs --tail 30 "$service" >&2
-    echo "De gegevens zijn niet aangetast; een backup staat in backups/. Zie README (Beheer)." >&2
+    echo "The data is unaffected; a backup is in backups/. See README (Maintenance)." >&2
     exit 1
   fi
 done
 
-# Oude, niet meer gebruikte images opruimen.
+# Clean up old, unused images.
 docker image prune -f >/dev/null
 
-echo "Klaar."
+echo "Done."
