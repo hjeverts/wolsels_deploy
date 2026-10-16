@@ -134,6 +134,7 @@ browser ──► nginx op de server (TLS, nginx/wolsels.conf)
 | `SMTP_USERNAME` / `SMTP_PASSWORD`   | –                       | Inloggegevens mailserver                             |
 | `SMTP_FROM` / `SMTP_FROM_NAME`      | – / `Wolsels`           | Afzender                                             |
 | `REGISTRY` / `TAG`                  | `ghcr.io/hjeverts` / `latest` | Registry en tag van de images                  |
+| `BACKEND_TAG` / `FRONTEND_TAG`      | `TAG`                   | Vaste versie per image, bv. `1.2.0`                  |
 | `COMPOSE_FILE`                      | –                       | Met `docker-compose.build.yml` erbij: zelf bouwen    |
 | `BACKEND_CONTEXT`                   | `../wolsels_backend`    | Bouwcontext backend bij zelf bouwen (pad of git-URL) |
 | `FRONTEND_CONTEXT`                  | `../wolsels_frontend`   | Bouwcontext frontend bij zelf bouwen                 |
@@ -143,23 +144,33 @@ Na het wijzigen van `.env`: `docker compose up -d`. Pas je `WOLSELS_PORT` aan, w
 
 ## Images
 
-Bij elke push naar `main` van [wolsels_backend](https://github.com/hjeverts/wolsels_backend) en
-[wolsels_frontend](https://github.com/hjeverts/wolsels_frontend) draait GitHub Actions de tests en zet
-het de images op ghcr.io:
+[wolsels_backend](https://github.com/hjeverts/wolsels_backend) en
+[wolsels_frontend](https://github.com/hjeverts/wolsels_frontend) hebben elk hun eigen versienummers.
+Een image wordt alleen gebouwd als je in die repo een versietag maakt; mergen naar `main` draait
+alleen de tests. Zo kun je meerdere wijzigingen verzamelen en ze samen uitbrengen.
+
+```sh
+cd wolsels_backend                            # alleen de repo('s) die gewijzigd zijn
+git switch main && git pull
+git tag v1.2.0 && git push origin v1.2.0      # of via GitHub: Releases → Draft a new release
+```
+
+Na een paar minuten staat de image op ghcr.io; draai daarna op de server `./scripts/update.sh`.
+Gebruik [semver](https://semver.org/lang/nl/): `v1.2.1` voor een bugfix, `v1.3.0` voor een nieuwe
+functie. Heeft de frontend een nieuwe backendfunctie nodig, breng dan eerst de backend uit.
 
 | Image                                 | Tags                                                     |
 |---------------------------------------|----------------------------------------------------------|
-| `ghcr.io/hjeverts/wolsels-backend`    | `latest`, `sha-<commit>`, bij een git-tag `v1.2.3` ook `1.2.3` en `1.2` |
-| `ghcr.io/hjeverts/wolsels-frontend`   | idem                                                     |
+| `ghcr.io/hjeverts/wolsels-backend`    | `1.2.0`, `1.2` en `latest` (de nieuwste versie)          |
+| `ghcr.io/hjeverts/wolsels-frontend`   | idem, met eigen versienummers                            |
 
-Elke maandag worden ze zonder cache opnieuw gebouwd, zodat beveiligingsupdates van de base-images
-meekomen; `./scripts/update.sh` haalt die vanzelf op.
+Elke maandag wordt de nieuwste versie zonder cache opnieuw gebouwd, zodat beveiligingsupdates van de
+base-images meekomen; `./scripts/update.sh` haalt die vanzelf op.
 
-**Terug naar een eerdere versie:** zet in `.env` `TAG=sha-<commit>` (de tags staan bij de packages op
-GitHub) en draai `./scripts/update.sh --force`. Backend en frontend krijgen dezelfde tag, dus kies een
-commit die in beide repo's bestaat, of gebruik versietags (`v1.2.3`) in beide repo's. Terug naar de
-nieuwste versie: `TAG=latest`. Let op: een oudere backend kent nieuwere databasemigraties niet; zet zo
-nodig ook de backup van vóór de update terug.
+**Een vaste of eerdere versie:** zet in `.env` `BACKEND_TAG=1.1.0` en/of `FRONTEND_TAG=1.0.0` (de
+versies staan bij de packages op GitHub) en draai `./scripts/update.sh`. Haal de regel weg om weer
+`latest` te volgen. Let op: een oudere backend kent nieuwere databasemigraties niet; zet zo nodig ook
+de backup van vóór de update terug.
 
 **Zelf bouwen** in plaats van ghcr.io gebruiken (bv. voor eigen aanpassingen): clone
 `wolsels_backend` en `wolsels_frontend` naast deze repo en zet in `.env`:
@@ -188,7 +199,7 @@ REGISTRY=wolsels
 
 ```sh
 docker compose logs -f backend      # logs
-./scripts/update.sh                 # alles bijwerken: nieuwe images ophalen, backup, herstarten
+./scripts/update.sh                 # bijwerken: nieuwe images ophalen, backup, herstarten
 ./scripts/backup.sh                 # backup van de database naar ./backups
 ```
 
@@ -197,7 +208,7 @@ de nieuwste 10 backups (`BACKUP_KEEP=20 ./scripts/backup.sh` voor meer). `update
 update automatisch een backup. Kopieer `backups/` geregeld naar een andere plek.
 
 `update.sh` haalt deze repo bij en daarna de nieuwste images (bij zelf bouwen: de broncode-repo's), en
-toont welke commits er nieuw zijn. Is er niets nieuws, dan stopt het (`--force` om de containers toch
+toont welke versies er nieuw zijn. Is er niets nieuws, dan stopt het (`--force` om de containers toch
 opnieuw te starten, of bij zelf bouwen opnieuw te bouwen). Daarna wacht het tot beide containers gezond
 zijn en toont anders de logs. De gegevens in het volume blijven bij updates altijd staan; gebruik nooit
 `docker compose down -v`, want `-v` verwijdert het volume met alle gegevens.

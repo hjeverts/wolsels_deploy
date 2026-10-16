@@ -57,12 +57,19 @@ else
   build=false
 fi
 
-# Image-ID en commit (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
+# Image-ID en versie (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
 image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || echo -; }
-image_rev() {
-  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true)
+# Versie van een draaiende container, of "niet gestart".
+container_version() {
+  if [ -z "$1" ]; then echo "niet gestart"; return; fi
+  rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null || true)
   case "$rev" in ""|"<no value>") rev="?" ;; esac
-  echo "$rev" | cut -c1-7
+  echo "$rev"
+}
+image_rev() {
+  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null || true)
+  case "$rev" in ""|"<no value>") rev="?" ;; esac
+  echo "$rev"
 }
 
 if [ "$build" = true ]; then
@@ -75,14 +82,16 @@ else
     echo "docker-compose.build.yml in COMPOSE_FILE. Zie README (Overstappen naar images van ghcr.io)." >&2
     exit 1
   fi
-  ids_before=$(for img in $images; do image_id "$img"; done)
-  revs_before=$(for img in $images; do image_rev "$img"; done)
   docker compose pull --quiet
-  for img in $images; do
-    old_rev=$(echo "$revs_before" | head -n 1); revs_before=$(echo "$revs_before" | tail -n +2)
-    old_id=$(echo "$ids_before" | head -n 1); ids_before=$(echo "$ids_before" | tail -n +2)
-    if [ "$old_id" != "$(image_id "$img")" ]; then
-      echo "  $img: $old_rev -> $(image_rev "$img")"
+  # Vergelijken met wat er draait (niet met wat er vóór de pull lokaal stond): zo wordt ook een
+  # gewijzigde BACKEND_TAG/FRONTEND_TAG opgepakt waarvan de image al lokaal stond.
+  for service in $(docker compose config --services); do
+    image=$(docker compose config --images "$service")
+    container=$(docker compose ps -q "$service")
+    running=-
+    [ -z "$container" ] || running=$(docker inspect -f '{{.Image}}' "$container")
+    if [ "$running" != "$(image_id "$image")" ]; then
+      echo "  $service: $(container_version "$container") -> $(image_rev "$image")"
       changed=true
     fi
   done
