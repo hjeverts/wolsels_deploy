@@ -1,8 +1,8 @@
-# Bouwt de images zelf vanuit de broncode-repo's in plaats van ze van ghcr.io te halen.
-# Aanzetten met in .env:
+# Builds the images from the source repos instead of pulling them from ghcr.io.
+# Enable with, in .env:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml
 #   REGISTRY=wolsels
-# ./scripts/update.sh doet dan git pull in de broncode-repo's en bouwt opnieuw.
+# ./scripts/update.sh then runs git pull in the source repos and rebuilds.
 services:
   backend:
     build:

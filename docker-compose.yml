@@ -1,4 +1,4 @@
-# Gebruikt de kant-en-klare images van ghcr.io. Zelf bouwen vanuit de broncode: zie
+# Uses the ready-made images from ghcr.io. To build from source yourself: see
 # docker-compose.build.yml.
 name: wolsels
 
@@ -11,7 +11,7 @@ services:
       Blends__MaxComponents: ${MAX_BLEND_COMPONENTS:-6}
       App__PublicUrl: ${WOLSELS_PUBLIC_URL:-}
       DataProtection__KeysPath: /data/keys
-      # Accounts en beveiliging
+      # Accounts and security
       Auth__AllowRegistration: ${ALLOW_REGISTRATION:-true}
       Auth__AdminEmail: ${ADMIN_EMAIL:-}
       Auth__MaxFailedAccessAttempts: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
@@ -20,7 +20,7 @@ services:
       Auth__RateLimitPerHour: ${AUTH_RATE_LIMIT_PER_HOUR:-60}
       Auth__PasswordResetPerIpPerHour: ${PASSWORD_RESET_PER_IP_PER_HOUR:-5}
       Auth__PasswordResetPerEmailPerHour: ${PASSWORD_RESET_PER_EMAIL_PER_HOUR:-3}
-      # Mailserver voor "wachtwoord vergeten" (leeg = uitgeschakeld)
+      # Mail server for "forgot password" (empty = disabled)
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
       Smtp__Security: ${SMTP_SECURITY:-Auto}
@@ -38,8 +38,8 @@ services:
     environment:
       API_UPSTREAM: http://backend:8080
     ports:
-      # Alleen bereikbaar vanaf de server zelf; de nginx op de server proxyt hiernaartoe.
-      # (WOLSELS_API_PORT is de oude naam uit de versie zonder frontend-container.)
+      # Only reachable from the server itself; the nginx on the server proxies to it.
+      # (WOLSELS_API_PORT is the old name from the version without a frontend container.)
       - "127.0.0.1:${WOLSELS_PORT:-${WOLSELS_API_PORT:-8080}}:8080"
     depends_on:
       backend:
