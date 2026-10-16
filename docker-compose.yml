@@ -4,7 +4,7 @@ name: wolsels
 
 services:
   backend:
-    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-backend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-backend:${BACKEND_TAG:-${TAG:-latest}}
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -33,7 +33,7 @@ services:
 
 
   frontend:
-    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-frontend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/hjeverts}/wolsels-frontend:${FRONTEND_TAG:-${TAG:-latest}}
     restart: unless-stopped
     environment:
       API_UPSTREAM: http://backend:8080

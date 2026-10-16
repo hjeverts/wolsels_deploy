@@ -57,12 +57,12 @@ else
   build=false
 fi
 
-# Image-ID en commit (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
+# Image-ID en versie (label van GitHub Actions) van een image, of "-" als hij er (nog) niet is.
 image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null || echo -; }
 image_rev() {
-  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true)
+  rev=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null || true)
   case "$rev" in ""|"<no value>") rev="?" ;; esac
-  echo "$rev" | cut -c1-7
+  echo "$rev"
 }
 
 if [ "$build" = true ]; then
