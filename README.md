@@ -64,6 +64,31 @@ sudo nginx -t && sudo systemctl reload nginx
 Without this change larger photos fail with a message that the file is too large to upload (HTTP 413).
 Photos are stored in the database and are therefore included in the backups.
 
+## Landing page and search engines (frontend from v1.3.0)
+
+Visitors who are not logged in see a public landing page on `/` that explains what Wolsels does, with buttons
+to sign up and log in (sign-up only when `ALLOW_REGISTRATION` allows it). Logged-in users go straight to their
+stock. The page is prerendered as HTML at build time, so search engines can read it.
+
+By default an installation is **not** indexed: `robots.txt` disallows everything and every response carries
+`X-Robots-Tag: noindex`. For a public installation that should be found:
+
+```sh
+# in .env
+WOLSELS_PUBLIC_URL=https://wolsels.example.nl
+WOLSELS_INDEXABLE=true
+```
+
+and run `docker compose up -d`. `robots.txt` then allows the landing page and the sign-up and login pages,
+and `/sitemap.xml` lists them. Submit the sitemap in Google Search Console.
+
+**One main domain.** Does Wolsels have several addresses (e.g. `www.` or an old domain)? Let them redirect
+permanently to the main domain, otherwise search engines see duplicate content. `nginx/wolsels.conf` has an
+example `server` block with `return 301`. Request a certificate for those domains too
+(`sudo certbot --nginx -d wolsels.example.nl -d www.wolsels.example.nl`). The login cookie belongs to one
+domain: whoever used the old address logs in once more, and an app installed from the old address on a phone
+or tablet must be added again.
+
 ## Switching to images from ghcr.io
 
 Did you build the images on the server until now? Then change the image settings in `.env`:
@@ -131,7 +156,8 @@ browser ──► nginx on the server (TLS, nginx/wolsels.conf)
 
 | Variable                            | Default                 | Description                                          |
 |-------------------------------------|-------------------------|------------------------------------------------------|
-| `WOLSELS_PUBLIC_URL`                | –                       | Public URL (for links in emails)                     |
+| `WOLSELS_PUBLIC_URL`                | –                       | Public URL without trailing slash (email links, landing page) |
+| `WOLSELS_INDEXABLE`                 | `false`                 | Let search engines index the landing page (robots.txt, sitemap.xml) |
 | `WOLSELS_PORT`                      | `8080`                  | Port on 127.0.0.1 (= `proxy_pass` in the nginx site) |
 | `MAX_BLEND_COMPONENTS`              | `6`                     | Maximum number of wools per blend                    |
 | `ALLOW_REGISTRATION`                | `true`                  | Allow self sign-up (the first account and invitations always work) |

@@ -37,6 +37,9 @@ services:
     restart: unless-stopped
     environment:
       API_UPSTREAM: http://backend:8080
+      # Public address (canonical link and sitemap of the landing page) and whether search engines may index it
+      PUBLIC_URL: ${WOLSELS_PUBLIC_URL:-}
+      SITE_INDEXABLE: ${WOLSELS_INDEXABLE:-false}
     ports:
       # Only reachable from the server itself; the nginx on the server proxies to it.
       # (WOLSELS_API_PORT is the old name from the version without a frontend container.)
